@@ -1,0 +1,16 @@
+autom4te.cache/
+.deps/
+
+Makefile*
+!Makefile.am
+aclocal.m4
+config*
+!configure.ac
+depcomp
+install-sh
+missing
+panopticon
+panopticon-*.tar.gz
+stamp-h1
+
+*.o
