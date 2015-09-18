@@ -12,5 +12,9 @@ missing
 panopticon
 panopticon-*.tar.gz
 stamp-h1
+tap-driver.sh
+test-*
+!test-*.cpp
+!test-*.h
 
 *.o
