@@ -1,6 +1,7 @@
 // Copyright (C) 2015 Philip Cronje. All rights reserved.
 #include <chrono>
 #include <csignal>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -38,11 +39,28 @@ namespace {
 	}
 
 	struct arguments {
+		constexpr static const char* envVarHostName = "PANOPTICON_CLOUDWATCH_HOST";
 		constexpr static const char* defaultHostName = "monitoring.us-east-1.amazonaws.com";
 		std::string cloudWatchHostName = defaultHostName;
 
 		constexpr static const char* defaultRegion = "us-east-1";
 		std::string region = defaultRegion;
+
+		arguments() {
+			bool overrideRegion = false;
+			const char* region_ = std::getenv("PANOPTICON_REGION");
+			if(region_ != nullptr) {
+				region = region_;
+				overrideRegion = true;
+			}
+
+			const char* cloudWatchHostName_ = std::getenv(envVarHostName);
+			if(cloudWatchHostName_ != nullptr) {
+				cloudWatchHostName = cloudWatchHostName_;
+			} else if(overrideRegion) {
+				cloudWatchHostName = "monitoring." + region + ".amazonaws.com";
+			}
+		}
 	};
 
 	class argumentsHelp {};
@@ -87,7 +105,9 @@ namespace {
 			}
 		}
 
-		if(overrideRegion && !overrideCloudWatchHostName) {
+		/* Derive the CloudWatch host name if a region parameter was supplied, and no host name was supplied as either
+		 * a command line argument or an environment variable. */
+		if(overrideRegion && !overrideCloudWatchHostName && (std::getenv(arguments::envVarHostName) == nullptr)) {
 			arguments.cloudWatchHostName = "monitoring." + arguments.region + ".amazonaws.com";
 		}
 
