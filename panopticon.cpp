@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include <unistd.h>
+
 #include "epoll.h"
 #include "stat.h"
 #include "stat-cpu.h"
@@ -114,8 +116,23 @@ namespace {
 		return arguments;
 	}
 
+	std::string getLocalHostName() {
+		const long hostNameMax = sysconf(_SC_HOST_NAME_MAX);
+		if(hostNameMax == -1) {
+			throw std::system_error(errno, std::system_category(), "Failed to retrieve maximum host name length");
+		}
+
+		char localHostName[hostNameMax];
+		if(gethostname(localHostName, sizeof(localHostName)) == -1) {
+			throw std::system_error(errno, std::system_category(), "Failed to retrieve local host name");
+		}
+		return localHostName;
+	}
+
 	void main(const std::string& executable, const argumentsContainer& argv) {
 		const arguments arguments = parseArguments(executable, argv);
+
+		const std::string localHostName = getLocalHostName();
 
 		std::signal(SIGINT, handleSignal);
 
