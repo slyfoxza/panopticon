@@ -100,6 +100,31 @@ namespace {
 		return true;
 	}
 
+	void parseAwsCredentials(arguments& arguments, std::istream& file) {
+		std::string profile;
+		for(std::string line; std::getline(file, line);) {
+			if(line[0] == '[' && line[line.size() - 1] == ']') {
+				profile = line.substr(1, line.size() - 2);
+			} else if(profile == "default") {
+				auto i = line.find_first_of('=');
+				if(i == std::string::npos) {
+					continue;
+				}
+
+				int lws, tws;
+				for(lws = i; line[lws] == ' '; --lws);
+				for(tws = i + 1; line[tws] == ' '; ++tws);
+				std::string key = line.substr(0, lws - 1);
+				std::string value = line.substr(tws);
+				if((key == "aws_access_key_id") && arguments.accessKey.empty()) {
+					arguments.accessKey = value;
+				} else if((key == "aws_secret_access_key") && arguments.secretKey.empty()) {
+					arguments.secretKey = value;
+				}
+			}
+		}
+	}
+
 	typedef std::vector<std::string> argumentsContainer;
 	arguments parseArguments(const std::string& executable, const argumentsContainer& argv) {
 		arguments arguments;
@@ -123,6 +148,17 @@ namespace {
 		 * a command line argument or an environment variable. */
 		if(overrideRegion && !overrideCloudWatchHostName && (std::getenv(arguments::envVarHostName) == nullptr)) {
 			arguments.cloudWatchHostName = "monitoring." + arguments.region + ".amazonaws.com";
+		}
+
+		if(arguments.accessKey.empty() || arguments.secretKey.empty()) {
+			const char* homeEnvVar = std::getenv("HOME");
+			if(homeEnvVar != nullptr) {
+				std::string home = std::string(homeEnvVar) + "/.aws/credentials";
+				std::ifstream file(home);
+				if(file.is_open()) {
+					parseAwsCredentials(arguments, file);
+				}
+			}
 		}
 
 		return arguments;
