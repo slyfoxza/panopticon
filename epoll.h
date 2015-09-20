@@ -19,6 +19,24 @@ class epoll {
 
 		operator int() const noexcept { return fd_; }
 
+		const epoll& operator+=(const int fd) const {
+			epoll_event event { EPOLLIN | EPOLLOUT | EPOLLET, reinterpret_cast<void*>(fd) };
+			const int rc = epoll_ctl(fd_, EPOLL_CTL_ADD, fd, &event);
+			if(rc == -1) {
+				throw std::system_error(errno, std::system_category(),
+						"Failed to register file descriptor with epoll");
+			}
+			return *this;
+		}
+
+		const epoll& operator-=(const int fd) const {
+			const int rc = epoll_ctl(fd_, EPOLL_CTL_DEL, fd, nullptr);
+			if(rc == -1) {
+				throw std::system_error(errno, std::system_category(), "Failed to remove file descriptor from epoll");
+			}
+			return *this;
+		}
+
 		template<typename D>
 		bool wait(epoll_event& event, const D& timeout) const {
 			const int rc = epoll_wait(fd_, &event, 1,

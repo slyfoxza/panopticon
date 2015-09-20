@@ -12,6 +12,7 @@
 
 #include "cloudwatch.h"
 #include "epoll.h"
+#include "net.h"
 #include "stat.h"
 #include "stat-cpu.h"
 
@@ -190,6 +191,7 @@ namespace {
 		using cpuAggregation = stat::aggregation<double>;
 		cpuAggregation user, system, ioWait;
 
+		net::socket socket;
 		while(signalStatus == 0) {
 			using clock = std::chrono::steady_clock;
 			auto now = clock::now();
@@ -198,11 +200,14 @@ namespace {
 			swapIn(cpu, stat::cpu(std::ifstream("/proc/stat")));
 			cpu.second.aggregate(cpu.first, user, system, ioWait);
 
-			if(countExceeded(60, user, system, ioWait)) {
+			if(countExceeded(2, user, system, ioWait)) {
 				aws::cloudwatch::newPutMetricDataRequest(arguments.cloudWatchHostName, arguments.region,
 						arguments.accessKey, arguments.secretKey, "Panopticon", { { "Host", localHostName } },
 						{ { "UserCPU", user }, { "SystemCPU", system }, { "IOWaitCPU", ioWait } });
-				// TODO: Ensure TLS connection exists, begin writing to AWS
+				if(!(socket.connected() || socket.connecting())) {
+					socket.connect(arguments.cloudWatchHostName, 443, epoll);
+					// TODO: Ensure TLS connection exists, begin writing to AWS
+				}
 				user = system = ioWait = cpuAggregation();
 			}
 
@@ -210,7 +215,17 @@ namespace {
 				epoll_event event;
 				if(!epoll.wait(event, then - now)) continue;
 
-				// TODO: Socket I/O
+				if((event.events & EPOLLOUT) != 0) socket.writable(true);
+				if((event.events & EPOLLIN) != 0) socket.readable(true);
+
+				if(socket.connecting() && socket.writable()) {
+					socket.completeConnect();
+					// TODO: Initiate TLS handshake
+				} else if(socket.connected()) {
+					// TODO: Drain/fill TLS output/input buffers
+				}
+
+				// TODO: Read/write to TLS engine
 			}
 		}
 	}
