@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -13,6 +14,7 @@
 #include "cloudwatch.h"
 #include "epoll.h"
 #include "net.h"
+#include "ssl.h"
 #include "stat.h"
 #include "stat-cpu.h"
 
@@ -185,11 +187,17 @@ namespace {
 
 		std::signal(SIGINT, handleSignal);
 
+		ssl::library sslLibrary;
+
 		epoll epoll;
 
 		auto cpu = std::make_pair(stat::cpu(), stat::cpu(std::ifstream("/proc/stat")));
 		using cpuAggregation = stat::aggregation<double>;
 		cpuAggregation user, system, ioWait;
+
+		const ssl::context sslContext;
+		sslContext.setDefaultVerifyPaths();
+		std::unique_ptr<ssl::connection> sslConnection;
 
 		net::socket socket;
 		while(signalStatus == 0) {
@@ -206,23 +214,45 @@ namespace {
 						{ { "UserCPU", user }, { "SystemCPU", system }, { "IOWaitCPU", ioWait } });
 				if(!(socket.connected() || socket.connecting())) {
 					socket.connect(arguments.cloudWatchHostName, 443, epoll);
-					// TODO: Ensure TLS connection exists, begin writing to AWS
+					sslConnection.reset(new ssl::connection(sslContext, socket));
 				}
 				user = system = ioWait = cpuAggregation();
 			}
 
 			while(((now = clock::now()) < then) && (signalStatus == 0)) {
-				epoll_event event;
-				if(!epoll.wait(event, then - now)) continue;
+				epoll_event event { 0, nullptr };
+				// FIXME: Checking event status even if wait could've returned 0
+				if(!epoll.wait(event, then - now) && !(socket.readable() || socket.writable())) continue;
 
 				if((event.events & EPOLLOUT) != 0) socket.writable(true);
 				if((event.events & EPOLLIN) != 0) socket.readable(true);
 
+				std::cout << "SSL state: " << std::hex << SSL_get_state(*sslConnection.get()) <<
+					" - Socket state (W/R): " << socket.writable() << "/" << socket.readable() << std::endl;
+
 				if(socket.connecting() && socket.writable()) {
 					socket.completeConnect();
-					// TODO: Initiate TLS handshake
 				} else if(socket.connected()) {
-					// TODO: Drain/fill TLS output/input buffers
+					if(socket.readable()) sslConnection->readFromSocket();
+					if(socket.writable()) sslConnection->writeToSocket();
+				}
+
+				if(sslConnection->inConnectInit()) {
+					if(!sslConnection->connect()) {
+						continue;
+					}
+
+					ssl::x509 certificate = sslConnection->peerCertificate();
+					if(!certificate) {
+						throw std::logic_error("No peer certificate presented");
+					} else {
+						sslConnection->verifyPeerCertificate();
+						if(!certificate.matchSan(arguments.cloudWatchHostName)) {
+							if(!certificate.matchCommonName(arguments.cloudWatchHostName)) {
+								throw std::logic_error("SAN/CN mismatch");
+							}
+						}
+					}
 				}
 
 				// TODO: Read/write to TLS engine

@@ -57,6 +57,7 @@ void net::socket::connect(const char* hostName, const int port, const epoll& epo
 			epoll -= fd_;
 		}
 	}
+	freeaddrinfo(addresses);
 }
 
 void net::socket::completeConnect() {
