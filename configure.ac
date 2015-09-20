@@ -5,6 +5,8 @@ AC_REQUIRE_AUX_FILE([tap-driver.sh])
 
 AC_PROG_CXX
 
+PKG_CHECK_MODULES([SSL], [libssl])
+
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile])
 

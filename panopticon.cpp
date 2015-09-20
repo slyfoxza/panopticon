@@ -10,6 +10,7 @@
 
 #include <unistd.h>
 
+#include "cloudwatch.h"
 #include "epoll.h"
 #include "stat.h"
 #include "stat-cpu.h"
@@ -41,12 +42,18 @@ namespace {
 	}
 
 	struct arguments {
+		constexpr static const char* envVarAccessKey = "AWS_ACCESS_KEY_ID";
+		std::string accessKey;
+
 		constexpr static const char* envVarHostName = "PANOPTICON_CLOUDWATCH_HOST";
 		constexpr static const char* defaultHostName = "monitoring.us-east-1.amazonaws.com";
 		std::string cloudWatchHostName = defaultHostName;
 
 		constexpr static const char* defaultRegion = "us-east-1";
 		std::string region = defaultRegion;
+
+		constexpr static const char* envVarSecretKey = "AWS_SECRET_KEY";
+		std::string secretKey;
 
 		arguments() {
 			bool overrideRegion = false;
@@ -62,6 +69,11 @@ namespace {
 			} else if(overrideRegion) {
 				cloudWatchHostName = "monitoring." + region + ".amazonaws.com";
 			}
+
+			const char* accessKey_ = std::getenv(envVarAccessKey);
+			if(accessKey_ != nullptr) accessKey = accessKey_;
+			const char* secretKey_ = std::getenv(envVarSecretKey);
+			if(secretKey_ != nullptr) secretKey = secretKey_;
 		}
 	};
 
@@ -151,7 +163,10 @@ namespace {
 			cpu.second.aggregate(cpu.first, user, system, ioWait);
 
 			if(countExceeded(60, user, system, ioWait)) {
-				// TODO: Convert to PutMetricData request, ensure TLS connection exists, begin writing to AWS
+				aws::cloudwatch::newPutMetricDataRequest(arguments.cloudWatchHostName, arguments.region,
+						arguments.accessKey, arguments.secretKey, "Panopticon", { { "Host", localHostName } },
+						{ { "UserCPU", user }, { "SystemCPU", system }, { "IOWaitCPU", ioWait } });
+				// TODO: Ensure TLS connection exists, begin writing to AWS
 				user = system = ioWait = cpuAggregation();
 			}
 

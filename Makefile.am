@@ -3,6 +3,8 @@ AM_CXXFLAGS = -std=c++11
 
 bin_PROGRAMS = panopticon
 panopticon_SOURCES = panopticon.cpp stat-cpu.cpp
+panopticon_CFLAGS = $(SSL_CFLAGS)
+panopticon_LDADD = $(SSL_LIBS)
 
 LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) $(top_srcdir)/tap-driver.sh
 TEST_LOG_DRIVER = $(LOG_DRIVER)
