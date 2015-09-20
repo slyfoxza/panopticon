@@ -1,6 +1,7 @@
 // Copyright (C) 2015 Philip Cronje. All rights reserved.
 #pragma once
 
+#include <cstring>
 #include <map>
 #include <sstream>
 #include <string>
@@ -33,7 +34,7 @@ namespace aws {
 			}
 		}
 
-		void newPutMetricDataRequest(const std::string& hostName, const std::string& region,
+		util::buffer newPutMetricDataRequest(const std::string& hostName, const std::string& region,
 				const std::string& accessKey, const std::string& secretKey,const std::string& nameSpace,
 				const std::unordered_map<std::string, std::string>& dimensions,
 				const std::unordered_map<std::string, stat::aggregation<double>>& aggregations) {
@@ -54,10 +55,14 @@ namespace aws {
 			const std::string payloadHash = digestContext.hashString(payloadString);
 
 			char headerDate[30];
-			std::strftime(headerDate, sizeof(headerDate), "%a, %d %b %Y %T %Z", nowTm); // TODO: Return value
+			//std::strftime(headerDate, sizeof(headerDate), "%a, %d %b %Y %T %Z", nowTm); // TODO: Return value
+			// FIXME: Same as amazonDate
+			std::strftime(headerDate, sizeof(headerDate), "%Y%m%dT%H%M%SZ", nowTm); // TODO: Return value
 
 			std::map<std::string, std::string> headers {
-				{ "date", headerDate },
+				{ "content-type", "application/x-www-form-urlencoded" },
+				{ "content-length", std::to_string(payloadString.size()) },
+				{ "x-amz-date", headerDate },
 				{ "host", hostName },
 			};
 
@@ -74,7 +79,8 @@ namespace aws {
 			for(++headerIt; headerIt != headers.cend(); ++headerIt) {
 				signedHeaders << ';' << headerIt->first;
 			}
-			canonicalString << signedHeaders.str() << '\n' << payloadHash << '\n';
+			canonicalString << signedHeaders.str() << '\n' << payloadHash;
+			std::cout << "Canonical string: <" << canonicalString.str() << '>' << std::endl;
 
 			const std::string canonicalRequestHash = digestContext.hashString(canonicalString.str());
 
@@ -83,21 +89,24 @@ namespace aws {
 			const std::string amazonDateOnly(amazonDate, amazonDate + 8);
 
 			std::ostringstream credentialScope;
-			credentialScope << amazonDateOnly << '/' << region << "/cloudwatch/aws4_request";
+			credentialScope << amazonDateOnly << '/' << region << "/monitoring/aws4_request";
 
 			std::ostringstream signingString;
 			signingString << "AWS4-HMAC-SHA256\n"
 				<< amazonDate << "\n"
 				<< credentialScope.str() << '\n'
 				<< canonicalRequestHash;
+			std::cout << "String to sign: <" << signingString.str() << '>' << std::endl;
 
+			std::cout << "Date only: <" << amazonDateOnly << ">" << std::endl;
 			uint8_t hmac1[256 / 8];
 			uint8_t hmac2[256 / 8];
 			crypto::hmac("AWS4" + secretKey, amazonDateOnly, hmac1);
 			crypto::hmac(hmac1, sizeof(hmac1), region, hmac2);
-			crypto::hmac(hmac2, sizeof(hmac2), "cloudwatch", hmac1);
+			crypto::hmac(hmac2, sizeof(hmac2), "monitoring", hmac1);
 			crypto::hmac(hmac1, sizeof(hmac1), "aws4_request", hmac2);
-			std::string signature = util::hexEncode(hmac2, sizeof(hmac2));
+			crypto::hmac(hmac2, sizeof(hmac2), signingString.str(), hmac1);
+			std::string signature = util::hexEncode(hmac1, sizeof(hmac1));
 
 			std::ostringstream authorization;
 			authorization << "AWS4-HMAC-SHA256 Credential=" << accessKey << '/' << credentialScope.str()
@@ -109,7 +118,11 @@ namespace aws {
 			for(const auto& header: headers) request << header.first << ": " << header.second << "\r\n";
 			request << "\r\n" << payloadString;
 
-			// TODO: Return request as byte buffer
+			const std::string requestString = request.str();
+			std::cout << "Request: <" << requestString << ">" << std::endl;
+			std::unique_ptr<uint8_t[]> data(new uint8_t[requestString.size()]);
+			std::memcpy(data.get(), requestString.c_str(), requestString.size());
+			return util::buffer(std::move(data), requestString.size());
 		}
 	}
 }

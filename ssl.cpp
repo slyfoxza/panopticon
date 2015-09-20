@@ -184,3 +184,31 @@ void ssl::connection::writeToSocket() const {
 	}
 	std::cout << "Wrote " << n << " bytes to socket from BIO" << std::endl;
 }
+
+void ssl::connection::read() const {
+	char buffer[4096];
+	const int rc = SSL_read(ssl_, buffer, 4095);
+	buffer[4095] = '\0';
+	if(rc < 0) {
+		const int error = SSL_get_error(ssl_, rc);
+		if((error == SSL_ERROR_WANT_READ) || (error == SSL_ERROR_WANT_WRITE)) return;
+		throw std::system_error(error, opensslCategory, "Failed to read from TLS engine");
+	} else {
+		buffer[rc] = '\0';
+		std::cout << "Read " << rc << " bytes form TLS engine: <" << buffer << '>' << std::endl;
+	}
+}
+
+void ssl::connection::write(util::buffer& buffer) const {
+	const int rc = SSL_write(ssl_, buffer, buffer.remaining());
+	if(rc <= 0) {
+		const int error = SSL_get_error(ssl_, rc);
+		if((error == SSL_ERROR_WANT_READ) || (error == SSL_ERROR_WANT_WRITE)) {
+			return;
+		}
+		throw std::system_error(error, opensslCategory, "Failed to write to TLS engine");
+	} else {
+		std::cout << "Wrote " << rc << " bytes to TLS engine" << std::endl;
+		buffer.advance(rc);
+	}
+}

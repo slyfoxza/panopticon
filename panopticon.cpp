@@ -199,6 +199,8 @@ namespace {
 		sslContext.setDefaultVerifyPaths();
 		std::unique_ptr<ssl::connection> sslConnection;
 
+		util::buffer requestBuffer;
+
 		net::socket socket;
 		while(signalStatus == 0) {
 			using clock = std::chrono::steady_clock;
@@ -208,10 +210,12 @@ namespace {
 			swapIn(cpu, stat::cpu(std::ifstream("/proc/stat")));
 			cpu.second.aggregate(cpu.first, user, system, ioWait);
 
-			if(countExceeded(2, user, system, ioWait)) {
-				aws::cloudwatch::newPutMetricDataRequest(arguments.cloudWatchHostName, arguments.region,
-						arguments.accessKey, arguments.secretKey, "Panopticon", { { "Host", localHostName } },
+			if(countExceeded(10, user, system, ioWait)) {
+				requestBuffer = aws::cloudwatch::newPutMetricDataRequest(arguments.cloudWatchHostName,
+						arguments.region, arguments.accessKey, arguments.secretKey, "Panopticon",
+						{ { "Host", localHostName } },
 						{ { "UserCPU", user }, { "SystemCPU", system }, { "IOWaitCPU", ioWait } });
+				std::cout << "Request buffer is " << requestBuffer.size() << " bytes" << std::endl;
 				if(!(socket.connected() || socket.connecting())) {
 					socket.connect(arguments.cloudWatchHostName, 443, epoll);
 					sslConnection.reset(new ssl::connection(sslContext, socket));
@@ -227,8 +231,10 @@ namespace {
 				if((event.events & EPOLLOUT) != 0) socket.writable(true);
 				if((event.events & EPOLLIN) != 0) socket.readable(true);
 
-				std::cout << "SSL state: " << std::hex << SSL_get_state(*sslConnection.get()) <<
+				/*
+				std::cout << "SSL state: " << std::hex << SSL_get_state(*sslConnection.get()) << std::dec <<
 					" - Socket state (W/R): " << socket.writable() << "/" << socket.readable() << std::endl;
+					*/
 
 				if(socket.connecting() && socket.writable()) {
 					socket.completeConnect();
@@ -253,9 +259,10 @@ namespace {
 							}
 						}
 					}
+				} else if(sslConnection->initFinished()) {
+					if(requestBuffer) sslConnection->write(requestBuffer);
+					sslConnection->read();
 				}
-
-				// TODO: Read/write to TLS engine
 			}
 		}
 	}

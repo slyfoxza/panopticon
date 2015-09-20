@@ -4,6 +4,7 @@
 #include <openssl/ssl.h>
 
 #include "net.h"
+#include "util.h"
 
 namespace ssl {
 	struct library {
@@ -51,6 +52,7 @@ namespace ssl {
 			operator SSL*() const noexcept { return ssl_; }
 
 			bool inConnectInit() const noexcept { return SSL_in_connect_init(ssl_); }
+			bool initFinished() const noexcept { return SSL_is_init_finished(ssl_); }
 
 			x509 peerCertificate() const noexcept;
 			void verifyPeerCertificate() const;
@@ -59,5 +61,8 @@ namespace ssl {
 
 			void readFromSocket() const;
 			void writeToSocket() const;
+
+			void read() const;
+			void write(util::buffer& buffer) const;
 	};
 }

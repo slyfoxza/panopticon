@@ -2,7 +2,7 @@
 AM_CXXFLAGS = -std=c++11
 
 bin_PROGRAMS = panopticon
-panopticon_SOURCES = panopticon.cpp net.cpp ssl.cpp stat-cpu.cpp
+panopticon_SOURCES = panopticon.cpp net.cpp ssl.cpp stat-cpu.cpp util.cpp
 panopticon_CFLAGS = $(SSL_CFLAGS)
 panopticon_LDADD = $(SSL_LIBS)
 
