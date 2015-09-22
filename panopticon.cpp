@@ -210,7 +210,7 @@ namespace {
 			swapIn(cpu, stat::cpu(std::ifstream("/proc/stat")));
 			cpu.second.aggregate(cpu.first, user, system, ioWait);
 
-			if(countExceeded(10, user, system, ioWait)) {
+			if(countExceeded(60, user, system, ioWait)) {
 				requestBuffer = aws::cloudwatch::newPutMetricDataRequest(arguments.cloudWatchHostName,
 						arguments.region, arguments.accessKey, arguments.secretKey, "Panopticon",
 						{ { "Host", localHostName } },
@@ -225,16 +225,17 @@ namespace {
 
 			while(((now = clock::now()) < then) && (signalStatus == 0)) {
 				epoll_event event { 0, nullptr };
-				// FIXME: Checking event status even if wait could've returned 0
-				if(!epoll.wait(event, then - now) && !(socket.readable() || socket.writable())) continue;
+				if(!epoll.wait(event, then - now)
+						&& !socket.readable() && !socket.writable() && !requestBuffer) {
+					continue;
+				}
 
 				if((event.events & EPOLLOUT) != 0) socket.writable(true);
 				if((event.events & EPOLLIN) != 0) socket.readable(true);
 
-				/*
 				std::cout << "SSL state: " << std::hex << SSL_get_state(*sslConnection.get()) << std::dec <<
-					" - Socket state (W/R): " << socket.writable() << "/" << socket.readable() << std::endl;
-					*/
+					" - Socket state (W/R): " << socket.writable() << "/" << socket.readable() <<
+					" - Request buffer state: " << static_cast<bool>(requestBuffer) << std::endl;
 
 				if(socket.connecting() && socket.writable()) {
 					socket.completeConnect();

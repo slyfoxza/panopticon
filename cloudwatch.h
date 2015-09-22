@@ -80,7 +80,7 @@ namespace aws {
 				signedHeaders << ';' << headerIt->first;
 			}
 			canonicalString << signedHeaders.str() << '\n' << payloadHash;
-			std::cout << "Canonical string: <" << canonicalString.str() << '>' << std::endl;
+			//std::cout << "Canonical string: <" << canonicalString.str() << '>' << std::endl;
 
 			const std::string canonicalRequestHash = digestContext.hashString(canonicalString.str());
 
@@ -96,7 +96,7 @@ namespace aws {
 				<< amazonDate << "\n"
 				<< credentialScope.str() << '\n'
 				<< canonicalRequestHash;
-			std::cout << "String to sign: <" << signingString.str() << '>' << std::endl;
+			//std::cout << "String to sign: <" << signingString.str() << '>' << std::endl;
 
 			std::cout << "Date only: <" << amazonDateOnly << ">" << std::endl;
 			uint8_t hmac1[256 / 8];
@@ -119,7 +119,7 @@ namespace aws {
 			request << "\r\n" << payloadString;
 
 			const std::string requestString = request.str();
-			std::cout << "Request: <" << requestString << ">" << std::endl;
+			//std::cout << "Request: <" << requestString << ">" << std::endl;
 			std::unique_ptr<uint8_t[]> data(new uint8_t[requestString.size()]);
 			std::memcpy(data.get(), requestString.c_str(), requestString.size());
 			return util::buffer(std::move(data), requestString.size());

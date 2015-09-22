@@ -16,7 +16,7 @@ namespace net {
 		public:
 			socket() = default;
 			socket(const socket&) = delete;
-			~socket() noexcept { close(fd_); }
+			~socket() noexcept { if(fd_ != -1) close(fd_); }
 
 			operator int() const noexcept { return fd_; }
 			bool connected() const noexcept { return connected_; }
